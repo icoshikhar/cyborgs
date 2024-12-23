@@ -1,49 +1,51 @@
-import os
-import tiktoken
-import pandas as pd
-from typing import Any
-from dotenv import load_dotenv
-from string import ascii_lowercase
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.prompts import ChatPromptTemplate
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
-from langchain.chains import LLMChain, StuffDocumentsChain
 from langchain.chains.summarize import load_summarize_chain
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import MapReduceDocumentsChain, ReduceDocumentsChain
+from typing import Any
+import pandas as pd
+import tiktoken
 
-# packages for print output notifications
-from io import StringIO
-import sys
+from dotenv import load_dotenv 
+import os 
 
-tmp = sys.stdout
-my_result = StringIO()
-sys.stdout = my_result
 load_dotenv()
 
-print("success in loading environment")
-
 # importing api keys and initiate llm
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-llm = ChatOpenAI(temperature=0, model='gpt-3.5-turbo')
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
 
-# Counting AutoScraper output tokens
+'''
+
+#Define the Summarize Chain
+summary_statement = """You are an expeienced copy writer providing a world-class summary of product reviews {cust_reviews} from numerous customers \
+                        on a given product from different leading e-commerce platforms. You write summary in 80 words of all reviews for a target audience \
+                        of wide array of product reviewers ranging from a common man to an experienced product review professional."""
+
+summary_prompt = ChatPromptTemplate.from_template(template=summary_statement)
+
+summary_chain = summary_prompt | llm
+
+#Load the comments
+
+
+docs = "What are products of Flipkart"
+
+result = summary_chain.invoke(docs)
+print(result.content)
+
+'''
+
+# Counting Review output tokens
 def count_tokens(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
 
     encoding = tiktoken.get_encoding(encoding_name)
     num_tokens = len(encoding.encode(string))
     return num_tokens
-
-# generate review summary for smaller revieww
-def small_reviews_summary(cust_reviews: str) -> str:
-    summary_statement = """You are an expeienced copy writer providing a world-class summary of product reviews {cust_reviews} from numerous customers \
-                        on a given product from different leading e-commerce platforms. You write summary of all reviews for a target audience \
-                        of wide array of product reviewers ranging from a common man to an expeirenced product review professional."""
-    summary_prompt = PromptTemplate(input_variables = ["cust_reviews"], template=summary_statement)
-    llm_chain = LLMChain(llm=llm, prompt=summary_prompt)
-    review_summary = llm_chain.invoke(cust_reviews)
-    return review_summary
 
 # split large reviews
 def document_split(cust_reviews: str, chunk_size: int, chunk_overlap: int) -> Any:
@@ -54,26 +56,28 @@ def document_split(cust_reviews: str, chunk_size: int, chunk_overlap: int) -> An
     split_docs = text_splitter.split_documents(docs)
     return split_docs
 
+
 # Applying map reduce to summarize large document
 def map_reduce_summary(split_docs: Any) -> str: 
     map_template = """Based on the following docs {docs}, please provide summary of reviews presented in these documents. 
     Review Summary is:"""
 
-    map_prompt = PromptTemplate.from_template(map_template)
-    map_chain = LLMChain(llm=llm, prompt=map_prompt)
+    map_prompt = ChatPromptTemplate.from_template(map_template)
+    map_chain = map_prompt | llm
 
     # Reduce
     reduce_template = """The following is set of summaries: 
     {doc_summaries}
     Take these document and return your consolidated summary in a professional manner addressing the key points of the customer reviews. 
     Review Summary is:"""
-    reduce_prompt = PromptTemplate.from_template(reduce_template)
+    reduce_prompt = ChatPromptTemplate.from_template(reduce_template)
 
     # Run chain
-    reduce_chain = LLMChain(llm=llm, prompt=reduce_prompt)
+    reduce_chain = reduce_prompt | llm
 
     # Takes a list of documents, combines them into a single string, and passes this to an LLMChain
-    combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="doc_summaries")
+    #ccombine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="doc_summaries")
+    combine_documents_chain = create_stuff_documents_chain(llm, reduce_prompt, document_variable_name="doc_summaries")
 
     # Combines and iteratively reduces the mapped documents
     reduce_documents_chain = ReduceDocumentsChain(
@@ -102,7 +106,7 @@ def map_reduce_summary(split_docs: Any) -> str:
 
     return cust_review_summary_mr
 
-# Applying refine method to summarize large document
+
 def refine_method_summary(split_docs) -> str:
     prompt_template = """
                   Please provide a summary of the following text.
@@ -110,8 +114,8 @@ def refine_method_summary(split_docs) -> str:
                   SUMMARY:
                   """
 
-    question_prompt = PromptTemplate(
-        template=prompt_template, input_variables=["text"]
+    question_prompt = ChatPromptTemplate(
+        template=prompt_template
     )
 
     refine_prompt_template = """
@@ -121,8 +125,8 @@ def refine_method_summary(split_docs) -> str:
                 BULLET POINT SUMMARY:
                 """
 
-    refine_prompt = PromptTemplate(
-        template=refine_prompt_template, input_variables=["text"])
+    refine_prompt = ChatPromptTemplate(
+        template=refine_prompt_template)
 
     # Load refine chain
     chain = load_summarize_chain(
@@ -132,7 +136,7 @@ def refine_method_summary(split_docs) -> str:
         refine_prompt=refine_prompt,
         return_intermediate_steps=False,
         input_key="input_text",
-    output_key="output_text",
+        output_key="output_text",
     )
     
     # generating review summary using refine method
@@ -140,18 +144,24 @@ def refine_method_summary(split_docs) -> str:
     return cust_review_summary_refine
 
 
+# generate review summary for smaller revieww
+def small_reviews_summary(cust_reviews: str) -> str:
+    summary_statement = """You are an expeienced copy writer providing a world-class summary of product reviews {cust_reviews} from numerous customers \
+                        on a given product from different leading e-commerce platforms. You write summary of all reviews for a target audience \
+                        of wide array of product reviewers ranging from a common man to an expeirenced product review professional."""
+    summary_prompt = ChatPromptTemplate.from_template(template=summary_statement)
+    summary_chain = summary_prompt | llm
+    review_summary = summary_chain.invoke(cust_reviews)
+    return review_summary
+
+
 def get_review_summary(reviews_data, productId: str) -> tuple[int, Any, str, str, str]:
 
     data = pd.DataFrame(reviews_data)
-    
     data.columns = [column.replace(" ", "_") for column in data.columns]
-
     data.rename(columns={"overall":"rating"}, inplace=True)
-
     data.sort_values(by=["rating"], ascending=False, inplace=True)
-
     data.query(f'asin == "{productId}"', inplace=True)
-
     reviews = " ".join(each for each in data.reviewText)
 
     # Checking review length
