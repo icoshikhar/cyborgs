@@ -1,6 +1,5 @@
 import pandas as pd
 import streamlit as st
-#from review_summary import get_review_summary
 from review_summary_gemini import get_review_summary
 
 # displaying page title and header
