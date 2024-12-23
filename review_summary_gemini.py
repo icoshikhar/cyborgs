@@ -18,27 +18,6 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 llm = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GEMINI_API_KEY)
 
-'''
-
-#Define the Summarize Chain
-summary_statement = """You are an expeienced copy writer providing a world-class summary of product reviews {cust_reviews} from numerous customers \
-                        on a given product from different leading e-commerce platforms. You write summary in 80 words of all reviews for a target audience \
-                        of wide array of product reviewers ranging from a common man to an experienced product review professional."""
-
-summary_prompt = ChatPromptTemplate.from_template(template=summary_statement)
-
-summary_chain = summary_prompt | llm
-
-#Load the comments
-
-
-docs = "What are products of Flipkart"
-
-result = summary_chain.invoke(docs)
-print(result.content)
-
-'''
-
 # Counting Review output tokens
 def count_tokens(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
