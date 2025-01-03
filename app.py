@@ -67,4 +67,3 @@ if submit_button:
         # displaying Refine Method customer review summary
         st.markdown(" ### The customer reviews summary using Refine Method: \n")
         st.write(summary_refine["output_text"])
-
